@@ -3,7 +3,7 @@
   "homepage": "https://www.bugsnag.com/platforms/react-native-error-reporting/",
   "repository": "https://github.com/bugsnag/bugsnag-react-native.git",
   "bugs": "https://github.com/bugsnag/bugsnag-react-native/issues",
-  "version": "2.13.0",
+  "version": "2.13.1",
   "license": "MIT",
   "main": "index.js",
   "types": "index.d.ts",
@@ -15,6 +15,7 @@
   },
   "files": [
     "index.js",
+    "index.d.ts",
     "lib",
     "android",
     "cocoa",
@@ -25,7 +26,7 @@
     "test:unit:js": "jest --coverage src/__tests__",
     "test:lint:js": "standard",
     "test:e2e:js": "bundle exec bugsnag-maze-runner --verbose",
-    "test:smoke:typescript": "tslint index.d.ts && tsc --strict test/app.ts"
+    "test:smoke:typescript": "./test/types.sh"
   },
   "peerDependencies": {
     "react-native": ">=0.40"
