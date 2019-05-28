@@ -1,6 +1,139 @@
 Changelog
 =========
 
+## 2.19.1 (2019-05-21)
+
+### Bug fixes
+
+* (iOS) Upgrade to bugsnag-cocoa v5.22.1:
+  * Report correct app version in out-of-memory reports. Previously the bundle
+    version was reported as the version number rather than the short version
+    string.
+    [#349](https://github.com/bugsnag/bugsnag-cocoa/pull/349)
+  * Fix missing stacktraces in reports generated from `notify()`
+    [#348](https://github.com/bugsnag/bugsnag-cocoa/pull/348)
+* (Android) Upgrade to bugsnag-android v4.14.2
+  * Disable ANR detection by default [#484](https://github.com/bugsnag/bugsnag-android/pull/484)
+
+## 2.19.0 (2019-05-13)
+
+### Enhancements
+
+* (iOS) Upgrade to bugsnag-cocoa v5.22.0:
+  * Add configuration option (`reportOOMs`) to disable out-of-memory (OOM) event
+    reporting, defaulting to enabled.
+    [bugsnag-cocoa#345](https://github.com/bugsnag/bugsnag-cocoa/pull/345)
+  * Disable background OOM reporting by default. It can be enabled using
+    `reportBackgroundOOMs`.
+    [bugsnag-cocoa#345](https://github.com/bugsnag/bugsnag-cocoa/pull/345)
+
+## 2.18.0 (2019-05-08)
+
+* Collect version information in device.runtimeVersions
+[#345](https://github.com/bugsnag/bugsnag-react-native/pull/345)
+
+Run checkstyle and lint on Android code, address existing violations
+[#452](https://github.com/bugsnag/bugsnag-react-native/pull/336)
+
+## 2.17.1 (2019-04-24)
+
+Re-release that fixes packaging issue where the previous artefact included duplicate header files, preventing compilation for iOS
+
+## 2.17.0 (2019-04-18)
+
+### Bug fixes
+
+* (iOS) Prevent delivering duplicate fatal JS crash reports when using enhanced
+  native integration.
+  [#337](https://github.com/bugsnag/bugsnag-react-native/pull/337)
+
+### Enhancements
+
+* (iOS) Upgrade to bugsnag-cocoa v5.20.0:
+  * Persist breadcrumbs on disk to allow reading upon next boot in the event of
+    an uncatchable app termination.
+  * Add `+[Bugsnag appDidCrashLastLaunch]` as a helper to determine if the
+    previous launch of the app ended in a crash or otherwise unexpected
+    termination.
+  * Report unexpected app terminations on iOS as likely out of memory events
+    where the operating system killed the app
+
+## 2.16.0 (2019-04-04)
+
+* (Android) Upgrade to bugsnag-android v4.13.0
+
+  ### Enhancements
+
+  * Add ANR detection to bugsnag-android
+  [#442](https://github.com/bugsnag/bugsnag-android/pull/442)
+
+  * Add unhandled_events field to native payload
+  [#445](https://github.com/bugsnag/bugsnag-android/pull/445)
+
+  ### Bug fixes
+
+  * Ensure boolean object from map serialised as boolean primitive in JNI
+  [#452](https://github.com/bugsnag/bugsnag-android/pull/452)
+
+  * Prevent NPE occurring when calling resumeSession()
+  [#444](https://github.com/bugsnag/bugsnag-android/pull/444)
+
+* (Cocoa) Upgrade to bugsnag-cocoa v5.19.1
+
+  ### Bug fixes
+
+  * Fix generating an incorrect stacktrace used when logging an exception to
+    Bugsnag from a location other than the original call site (for example, from a
+    logging function or across threads).  If an exception was raised/thrown, then
+    the resulting Bugsnag report from `notify()` will now use the `NSException`
+    instance's call stack addresses to construct the stacktrace, ignoring depth.
+    This fixes an issue in macOS exception reporting where `reportException` is
+    reporting the handler code stacktrace rather than the reported exception
+    stack.
+    [#334](https://github.com/bugsnag/bugsnag-cocoa/pull/334)
+
+  * Fix network connectivity monitor by connecting to the correct domain
+    [Jacky Wijaya](https://github.com/Jekiwijaya)
+    [#332](https://github.com/bugsnag/bugsnag-cocoa/pull/332)
+
+
+
+
+## 2.15.0 (2019-03-07)
+
+* Add stopSession() and resumeSession() to Client [#314](https://github.com/bugsnag/bugsnag-react-native/pull/314)
+
+* (Android) Upgrade to bugsnag-android v4.12.0
+
+  ### Enhancements
+
+  * Add stopSession() and resumeSession() to Client
+  [#429](https://github.com/bugsnag/bugsnag-android/pull/429)
+
+  ### Bug fixes
+
+  * Prevent overwriting config.projectPackages if already set
+    [#428](https://github.com/bugsnag/bugsnag-android/pull/428)
+
+  * Fix incorrect session handledCount when notifying in quick succession
+    [#434](https://github.com/bugsnag/bugsnag-android/pull/434)
+
+* (Cocoa) Upgrade to bugsnag-cocoa v5.19.0
+
+  Note for Carthage users: this release updates the Xcode configuration to the settings recommended by Xcode 10.
+
+  * Update workspace to recommended settings suggested by XCode 10
+    [#324](https://github.com/bugsnag/bugsnag-cocoa/pull/324)
+
+  ### Enhancements
+
+  * Add stopSession() and resumeSession() to Bugsnag
+    [#325](https://github.com/bugsnag/bugsnag-cocoa/pull/325)
+
+  * Capture basic report diagnostics in the file path in case of crash report
+    content corruption
+    [#327](https://github.com/bugsnag/bugsnag-cocoa/pull/327)
+
 ## 2.14.0 (2019-01-23)
 
 * (Android) Upgrade to bugsnag-android v4.11.0

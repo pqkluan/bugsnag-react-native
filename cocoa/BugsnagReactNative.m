@@ -1,6 +1,7 @@
 #import "Bugsnag.h"
 #import "BSG_KSCrashC.h"
 #import "BugsnagReactNative.h"
+#import "RCTVersion.h"
 #import <React/RCTConvert.h>
 
 NSString *const BSGInfoPlistKey = @"BugsnagAPIKey";
@@ -99,6 +100,12 @@ NSArray *BSGParseJavaScriptStacktrace(NSString *stacktrace, NSNumberFormatter *f
     return frames;
 }
 
+bool (^BSGReactNativeReportFilter)(NSDictionary *, BugsnagCrashReport *) = ^bool(NSDictionary *rawEventData,
+                                                                                 BugsnagCrashReport *_Nonnull report) {
+    return !([report.errorClass hasPrefix:@"RCTFatalException"]
+          && [report.errorMessage hasPrefix:@"Unhandled JS Exception"]);
+};
+
 @interface Bugsnag ()
 + (id)notifier;
 + (BOOL)bugsnagStarted;
@@ -121,10 +128,9 @@ NSArray *BSGParseJavaScriptStacktrace(NSString *stacktrace, NSNumberFormatter *f
 }
 
 + (void)startWithAPIKey:(NSString *)APIKey {
-    if (APIKey.length == 0)
-        APIKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:BSGInfoPlistKey];
-
-    [Bugsnag startBugsnagWithApiKey:APIKey];
+    BugsnagConfiguration *config = [BugsnagConfiguration new];
+    config.apiKey = APIKey;
+    [self startWithConfiguration:config];
 }
 
 + (void)startWithConfiguration:(BugsnagConfiguration *)config {
@@ -136,6 +142,7 @@ NSArray *BSGParseJavaScriptStacktrace(NSString *stacktrace, NSNumberFormatter *f
     // way to interact with the application should instead leverage startSession
     // manually.
     config.shouldAutoCaptureSessions = NO;
+    [config addBeforeSendBlock:BSGReactNativeReportFilter];
     [Bugsnag startBugsnagWithConfiguration:config];
 }
 
@@ -209,6 +216,20 @@ RCT_EXPORT_METHOD(startSession) {
     [Bugsnag startSession];
 }
 
+RCT_EXPORT_METHOD(stopSession) {
+    if (![Bugsnag bugsnagStarted]) {
+        return;
+    }
+    [Bugsnag stopSession];
+}
+
+RCT_EXPORT_METHOD(resumeSession) {
+    if (![Bugsnag bugsnagStarted]) {
+        return;
+    }
+    [Bugsnag resumeSession];
+}
+
 RCT_EXPORT_METHOD(clearUser) {
     if (![Bugsnag bugsnagStarted]) {
         return;
@@ -251,8 +272,19 @@ RCT_EXPORT_METHOD(startWithOptions:(NSDictionary *)options) {
     config.shouldAutoCaptureSessions = [RCTConvert BOOL:options[@"autoCaptureSessions"]];
     config.automaticallyCollectBreadcrumbs = [RCTConvert BOOL:options[@"automaticallyCollectBreadcrumbs"]];
 
+    [config addBeforeSendSession:^void(NSMutableDictionary *_Nonnull data) {
+        data[@"device"] = [self addDeviceRuntimeVersion:data[@"device"]
+                                     reactNativeVersion:[self findReactNativeVersion]];
+    }];
+
     [config addBeforeSendBlock:^bool(NSDictionary *_Nonnull rawEventData,
                                      BugsnagCrashReport *_Nonnull report) {
+        NSString *reactNativeVersion = report.metaData[@"_bugsnag"][@"reactNativeVersion"];
+        if (reactNativeVersion != nil) {
+            report.device = [self addDeviceRuntimeVersion:report.device reactNativeVersion:reactNativeVersion];
+        }
+        report.metaData = [self removeRuntimeVersionFromMetaData:report];
+
         return !([report.errorClass hasPrefix:@"RCTFatalException"]
                  && [report.errorMessage hasPrefix:@"Unhandled JS Exception"]);
     }];
@@ -270,9 +302,12 @@ RCT_EXPORT_METHOD(startWithOptions:(NSDictionary *)options) {
                             withValue:codeBundleId
                         toTabWithName:@"app"];
     }
-    if ([Bugsnag bugsnagStarted] && !config.autoNotify) {
-        bsg_kscrash_setHandlingCrashTypes(BSG_KSCrashTypeUserReported);
-    } else if (![Bugsnag bugsnagStarted]) {
+    if ([Bugsnag bugsnagStarted]) {
+        if (!config.autoNotify) {
+            bsg_kscrash_setHandlingCrashTypes(BSG_KSCrashTypeUserReported);
+        }
+    } else {
+        [config addBeforeSendBlock:BSGReactNativeReportFilter];
         [Bugsnag startBugsnagWithConfiguration:config];
     }
     [self setNotifierDetails:[RCTConvert NSString:options[@"version"]]];
@@ -280,8 +315,70 @@ RCT_EXPORT_METHOD(startWithOptions:(NSDictionary *)options) {
         // The launch event session is skipped because shouldAutoCaptureSessions
         // was not set when Bugsnag was first initialized. Manually sending a
         // session to compensate.
-        [Bugsnag startSession];
+        [Bugsnag resumeSession];
     }
+    [self addRuntimeVersionToMetaData:config];
+}
+
+/**
+ * Stores runtime version info in a metadata tab (it will be moved to a
+ * different payload location before sending)
+ */
+- (void)addRuntimeVersionToMetaData:(BugsnagConfiguration *)config {
+    [config.metaData addAttribute:@"reactNativeVersion"
+                        withValue:[self findReactNativeVersion]
+                    toTabWithName:@"_bugsnag"];
+}
+
+- (NSDictionary *)removeRuntimeVersionFromMetaData:(BugsnagCrashReport *)report {
+    NSMutableDictionary *metadata = report.metaData.mutableCopy;
+    metadata[@"_bugsnag"] = nil;
+    return metadata;
+}
+
+- (NSDictionary *)addDeviceRuntimeVersion:(NSDictionary *)device
+                       reactNativeVersion:(NSString *)reactNativeVersion {
+    NSMutableDictionary *copy = [device mutableCopy];
+    NSMutableDictionary *runtimeVersions = [copy[@"runtimeVersions"] mutableCopy];
+
+    if (runtimeVersions == nil) {
+        runtimeVersions = [NSMutableDictionary new];
+    }
+    runtimeVersions[@"reactNative"] = reactNativeVersion;
+    copy[@"runtimeVersions"] = runtimeVersions;
+    return copy;
+}
+
+// see https://github.com/facebook/react-native/blob/6df2edeb2a33d529e4b13a5b6767f300d08aeb0a/scripts/bump-oss-version.js
+- (NSString *)findReactNativeVersion {
+    static dispatch_once_t onceToken;
+    static NSString *BSGReactNativeVersion = nil;
+    dispatch_once(&onceToken, ^{
+        NSDictionary *versionMap = RCTGetReactNativeVersion();
+        NSNumber *major = versionMap[@"major"];
+        NSNumber *minor = versionMap[@"minor"];
+        NSNumber *patch = versionMap[@"patch"];
+        NSString *prerelease = versionMap[@"prerelease"];
+        NSMutableString *versionString = [NSMutableString new];
+
+        if (![major isEqual:[NSNull null]]) {
+            [versionString appendString:[major stringValue]];
+            [versionString appendString:@"."];
+        }
+        if (![minor isEqual:[NSNull null]]) {
+            [versionString appendString:[minor stringValue]];
+            [versionString appendString:@"."];
+        }
+        if (![patch isEqual:[NSNull null]]) {
+            [versionString appendString:[patch stringValue]];
+        }
+        if (![prerelease isEqual:[NSNull null]]) {
+            [versionString appendString:@"-"];
+            [versionString appendString:prerelease];
+        }
+        BSGReactNativeVersion = [NSString stringWithString:versionString];
+    });
+    return BSGReactNativeVersion;
 }
 
 - (void)setNotifierDetails:(NSString *)packageVersion {
